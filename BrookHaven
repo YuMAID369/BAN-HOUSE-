@@ -1,5 +1,5 @@
 --====================================================================
--- BANHOUSE V32 SUPREMO - VERSÃO FINAL (SCROLLING & REAL-TIME UPDATE)
+-- BANHOUSE V33 SUPREMO - MANSION UNLOCK & FULL DEFENSE
 --====================================================================
 
 local Players = game:GetService("Players")
@@ -14,9 +14,10 @@ end
 
 local Config = {
     Ativo = false, 
-    DistanciaDefesa = 140,
+    DistanciaDefesa = 160, -- Aumentado para cobrir a área maior das mansões
     Whitelist = {},
     LotePos = nil,
+    LoteNome = "",
     Running = true
 }
 
@@ -45,7 +46,7 @@ local function MakeDraggable(obj)
 end
 
 --====================================
--- 1. MOTOR DE BANIMENTO
+-- 1. MOTOR DE BANIMENTO (MANSION & VIP COMPATIBLE)
 --====================================
 local function ExecutarBan(alvo)
     if not Config.Ativo or not Config.Running then return end 
@@ -58,24 +59,46 @@ local function ExecutarBan(alvo)
         
         if hrpAlvo and meuHrp then
             local oldPos = meuHrp.CFrame
+            -- Teleporte rápido para validação de proximidade do ban
             meuHrp.CFrame = hrpAlvo.CFrame * CFrame.new(0, 0, 1)
 
+            -- 1. GATILHO PADRÃO (RE)
             local Trigger = ReplicatedStorage:FindFirstChild("RE") and ReplicatedStorage.RE:FindFirstChild("1Playe1rTrigge1rEven1t")
-            if Trigger then pcall(function() Trigger:FireServer("BanPlayerFromHouse", alvo, alvo.Character) end) end
+            if Trigger then 
+                pcall(function() Trigger:FireServer("BanPlayerFromHouse", alvo, alvo.Character) end) 
+            end
 
-            local lots = workspace:FindFirstChild("001_Lots")
+            -- 2. GATILHO DE TELEMETRIA (MANSION/VIP BYPASS)
+            -- Simula a interação com o painel da mansão para o servidor aceitar o ban
+            local Telemetry = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("TelemetryClientInteraction")
+            if Telemetry and Config.LoteNome ~= "" then
+                pcall(function()
+                    Telemetry:FireServer("filterClick", {
+                        name = Config.LoteNome,
+                        itemType = "Mansions",
+                        targetPlayer = alvo
+                    })
+                end)
+            end
+
+            -- 3. BUSCA POR PERMISSÕES LOCAIS (MANSÕES E CASAS MODERNAS)
+            local lots = workspace:FindFirstChild("001_Lots") or workspace:FindFirstChild("Plots")
             if lots then
                 for _, casa in pairs(lots:GetChildren()) do
                     local owner = casa:FindFirstChild("Owner")
                     if (owner and owner.Value == Players.LocalPlayer.Name) or casa.Name:find(Players.LocalPlayer.Name) then
-                        local houseModel = casa:FindFirstChild("HousePickedByPlayer") and casa.HousePickedByPlayer:FindFirstChild("HouseModel")
+                        -- Procura por remotes de permissão dentro de modelos de mansão
+                        local houseModel = casa:FindFirstChild("HousePickedByPlayer") or casa:FindFirstChild("MansionModel")
                         if houseModel then
-                            local permRemote = houseModel:FindFirstChild("Permissions:Disallow")
-                            if permRemote then pcall(function() permRemote:FireServer(alvo) end) end
+                            local disallow = houseModel:FindFirstChild("Permissions:Disallow", true) -- Busca recursiva
+                            if disallow then 
+                                pcall(function() disallow:FireServer(alvo) end) 
+                            end
                         end
                     end
                 end
             end
+
             RunService.Heartbeat:Wait()
             meuHrp.CFrame = oldPos
         end
@@ -88,7 +111,7 @@ end
 local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = "BanHouse_V32_Final"
 
 local OpenBtn = Instance.new("ImageButton", ScreenGui)
-OpenBtn.Size = UDim2.new(0, 55, 0, 55); OpenBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
+OpenBtn.Size = UDim2.new(0, 70, 0, 70); OpenBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
 OpenBtn.Image = "rbxassetid://71203052979190"; OpenBtn.BackgroundTransparency = 1
 OpenBtn.Active = true; OpenBtn.ZIndex = 10
 MakeDraggable(OpenBtn)
@@ -106,17 +129,16 @@ BgImage.Image = "rbxassetid://105471069264842"; BgImage.BackgroundTransparency =
 
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(0, 300, 0, 50); Title.Position = UDim2.new(0.05, 0, 0.05, 0)
-Title.Text = "BanHouse V32 SUPREMO"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = "GothamBold"; Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = "Left"
+Title.Text = "BanHouse CUBNIT"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = "GothamBold"; Title.TextSize = 22; Title.BackgroundTransparency = 1; Title.TextXAlignment = "Left"
 
 local CloseBtn = Instance.new("TextButton", Main)
 CloseBtn.Size = UDim2.new(0, 40, 0, 40); CloseBtn.Position = UDim2.new(0.88, 0, 0.04, 0)
 CloseBtn.Text = "X"; CloseBtn.TextColor3 = Color3.fromRGB(255, 50, 50); CloseBtn.Font = "GothamBold"; CloseBtn.TextSize = 26; CloseBtn.BackgroundTransparency = 1
 
--- CONFIGURAÇÃO DO SCROLLING FRAME
 local Scroll = Instance.new("ScrollingFrame", Main)
 Scroll.Size = UDim2.new(0, 230, 0, 210); Scroll.Position = UDim2.new(0.48, 0, 0.22, 0)
 Scroll.BackgroundTransparency = 1; Scroll.ScrollBarThickness = 4
-Scroll.CanvasSize = UDim2.new(0, 0, 0, 0) -- Será atualizado dinamicamente
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 local Layout = Instance.new("UIListLayout", Scroll)
 Layout.Padding = UDim.new(0, 5); Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
@@ -126,13 +148,8 @@ Layout.Padding = UDim.new(0, 5); Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
 local function UpdateList()
     if not Config.Running then return end
+    for _, v in pairs(Scroll:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
     
-    -- Limpa a lista atual
-    for _, v in pairs(Scroll:GetChildren()) do 
-        if v:IsA("TextButton") then v:Destroy() end 
-    end
-    
-    -- Reconstrói a lista com todos os jogadores
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= Players.LocalPlayer then
             local pBtn = Instance.new("TextButton", Scroll)
@@ -154,12 +171,9 @@ local function UpdateList()
             end)
         end
     end
-    
-    -- AJUSTE DINÂMICO DO TAMANHO DO SCROLL (ALCANÇA O ÚLTIMO JOGADOR)
     Scroll.CanvasSize = UDim2.new(0, 0, 0, Layout.AbsoluteContentSize.Y + 10)
 end
 
--- Monitorar entrada e saída de jogadores para atualizar a lista em tempo real
 Players.PlayerAdded:Connect(function() task.wait(0.5); UpdateList() end)
 Players.PlayerRemoving:Connect(UpdateList)
 
@@ -182,22 +196,32 @@ local function CreateActionBtn(text, pos)
     return btn
 end
 
-local BtnMark = CreateActionBtn("Mark Home", UDim2.new(0.05, 0, 0.25, 0))
-local BtnClear = CreateActionBtn("Clear land", UDim2.new(0.05, 0, 0.45, 0))
+local BtnMark = CreateActionBtn("Marcar House", UDim2.new(0.05, 0, 0.25, 0))
+local BtnClear = CreateActionBtn("Limpar Terreno", UDim2.new(0.05, 0, 0.45, 0))
 local BtnActive = CreateActionBtn("Defense: OFF", UDim2.new(0.05, 0, 0.65, 0))
 
 BtnMark.MouseButton1Click:Connect(function()
-    local lots = workspace:FindFirstChild("001_Lots")
+    local lots = workspace:FindFirstChild("001_Lots") or workspace:FindFirstChild("Plots")
     if lots then
         for _, p in pairs(lots:GetChildren()) do
-            if (p:FindFirstChild("Owner") and p.Owner.Value == Players.LocalPlayer.Name) or p.Name:find(Players.LocalPlayer.Name) then
+            local owner = p:FindFirstChild("Owner")
+            if (owner and owner.Value == Players.LocalPlayer.Name) or p.Name:find(Players.LocalPlayer.Name) then
                 Config.LotePos = p:GetPivot().Position
+                
+                -- Detectar se é uma mansão para o Bypass de Telemetria
+                local model = p:FindFirstChild("HousePickedByPlayer") or p:FindFirstChild("MansionModel")
+                if model then
+                    Config.LoteNome = model.Name
+                else
+                    Config.LoteNome = "012_Mansion" -- Default para Mansão se não ler o nome
+                end
+                
                 BtnMark.BackgroundColor3 = Color3.fromRGB(0, 80, 200); BtnMark.Text = "Home Sync ✓"
                 return
             end
         end
     end
-    BtnMark.Text = "Not Found!"; task.wait(1); BtnMark.Text = "Mark Home"
+    BtnMark.Text = "Not Found!"; task.wait(1); BtnMark.Text = "Mark Home/Mansion"
 end)
 
 BtnActive.MouseButton1Click:Connect(function()
@@ -228,7 +252,11 @@ task.spawn(function()
             for _, p in pairs(Players:GetPlayers()) do
                 if p ~= Players.LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                     local dist = (Config.LotePos - p.Character.HumanoidRootPart.Position).Magnitude
-                    if dist < Config.DistanciaDefesa then ExecutarBan(p) end
+                    -- Ajuste de distância automática se for mansão (áreas maiores)
+                    local threshold = (Config.LoteNome:find("Mansion") or Config.LoteNome:find("012")) and 200 or Config.DistanciaDefesa
+                    if dist < threshold then 
+                        ExecutarBan(p) 
+                    end
                 end
             end
         end
