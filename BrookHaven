@@ -1,5 +1,5 @@
 --====================================================================
--- BANHOUSE V33 SUPREMO - MANSION UNLOCK & FULL DEFENSE
+-- BANHOUSE V34 SUPREMO - UNIVERSAL MANSION & DYNAMIC ID
 --====================================================================
 
 local Players = game:GetService("Players")
@@ -14,10 +14,10 @@ end
 
 local Config = {
     Ativo = false, 
-    DistanciaDefesa = 160, -- Aumentado para cobrir a área maior das mansões
+    DistanciaDefesa = 160,
     Whitelist = {},
     LotePos = nil,
-    LoteNome = "",
+    LoteNome = "", -- Armazenará o ID dinâmico (ex: 012_Mansion, 013_Mansion)
     Running = true
 }
 
@@ -46,7 +46,7 @@ local function MakeDraggable(obj)
 end
 
 --====================================
--- 1. MOTOR DE BANIMENTO (MANSION & VIP COMPATIBLE)
+-- 1. MOTOR DE BANIMENTO (UNIVERSAL MANSION ENGINE)
 --====================================
 local function ExecutarBan(alvo)
     if not Config.Ativo or not Config.Running then return end 
@@ -59,41 +59,38 @@ local function ExecutarBan(alvo)
         
         if hrpAlvo and meuHrp then
             local oldPos = meuHrp.CFrame
-            -- Teleporte rápido para validação de proximidade do ban
             meuHrp.CFrame = hrpAlvo.CFrame * CFrame.new(0, 0, 1)
 
-            -- 1. GATILHO PADRÃO (RE)
+            -- GATILHO 1: REMOTE PADRÃO
             local Trigger = ReplicatedStorage:FindFirstChild("RE") and ReplicatedStorage.RE:FindFirstChild("1Playe1rTrigge1rEven1t")
             if Trigger then 
                 pcall(function() Trigger:FireServer("BanPlayerFromHouse", alvo, alvo.Character) end) 
             end
 
-            -- 2. GATILHO DE TELEMETRIA (MANSION/VIP BYPASS)
-            -- Simula a interação com o painel da mansão para o servidor aceitar o ban
+            -- GATILHO 2: TELEMETRIA DINÂMICA (MANSÕES VIPS / NOVAS)
+            -- Usa o ID detectado automaticamente (012, 013, 014...)
             local Telemetry = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("TelemetryClientInteraction")
             if Telemetry and Config.LoteNome ~= "" then
-                pcall(function()
-                    Telemetry:FireServer("filterClick", {
+                local args = {
+                    "filterClick",
+                    {
                         name = Config.LoteNome,
-                        itemType = "Mansions",
-                        targetPlayer = alvo
-                    })
-                end)
+                        itemType = "Mansions"
+                    }
+                }
+                pcall(function() Telemetry:FireServer(unpack(args)) end)
             end
 
-            -- 3. BUSCA POR PERMISSÕES LOCAIS (MANSÕES E CASAS MODERNAS)
+            -- GATILHO 3: PERMISSÕES INTERNAS DA MANSÃO
             local lots = workspace:FindFirstChild("001_Lots") or workspace:FindFirstChild("Plots")
             if lots then
                 for _, casa in pairs(lots:GetChildren()) do
                     local owner = casa:FindFirstChild("Owner")
                     if (owner and owner.Value == Players.LocalPlayer.Name) or casa.Name:find(Players.LocalPlayer.Name) then
-                        -- Procura por remotes de permissão dentro de modelos de mansão
-                        local houseModel = casa:FindFirstChild("HousePickedByPlayer") or casa:FindFirstChild("MansionModel")
+                        local houseModel = casa:FindFirstChild("HousePickedByPlayer")
                         if houseModel then
-                            local disallow = houseModel:FindFirstChild("Permissions:Disallow", true) -- Busca recursiva
-                            if disallow then 
-                                pcall(function() disallow:FireServer(alvo) end) 
-                            end
+                            local disallow = houseModel:FindFirstChild("Permissions:Disallow", true)
+                            if disallow then pcall(function() disallow:FireServer(alvo) end) end
                         end
                     end
                 end
@@ -200,6 +197,7 @@ local BtnMark = CreateActionBtn("Marcar House", UDim2.new(0.05, 0, 0.25, 0))
 local BtnClear = CreateActionBtn("Limpar Terreno", UDim2.new(0.05, 0, 0.45, 0))
 local BtnActive = CreateActionBtn("Defense: OFF", UDim2.new(0.05, 0, 0.65, 0))
 
+-- LOGICA DE MARK HOME COM DETECÇÃO DE ID
 BtnMark.MouseButton1Click:Connect(function()
     local lots = workspace:FindFirstChild("001_Lots") or workspace:FindFirstChild("Plots")
     if lots then
@@ -208,20 +206,26 @@ BtnMark.MouseButton1Click:Connect(function()
             if (owner and owner.Value == Players.LocalPlayer.Name) or p.Name:find(Players.LocalPlayer.Name) then
                 Config.LotePos = p:GetPivot().Position
                 
-                -- Detectar se é uma mansão para o Bypass de Telemetria
-                local model = p:FindFirstChild("HousePickedByPlayer") or p:FindFirstChild("MansionModel")
-                if model then
-                    Config.LoteNome = model.Name
-                else
-                    Config.LoteNome = "012_Mansion" -- Default para Mansão se não ler o nome
+                -- DETECÇÃO DINÂMICA DO ID DA MANSÃO (Chave para 012, 013, 014...)
+                local picked = p:FindFirstChild("HousePickedByPlayer")
+                if picked then
+                    local model = picked:FindFirstChildWhichIsA("Model")
+                    if model then
+                        Config.LoteNome = model.Name -- Captura "013_Mansion" ou qualquer outra
+                    end
                 end
                 
-                BtnMark.BackgroundColor3 = Color3.fromRGB(0, 80, 200); BtnMark.Text = "Home Sync ✓"
+                -- Fallback caso a detecção direta falhe, mas o lote seja mansão
+                if Config.LoteNome == "" and p:FindFirstChild("MansionModel") then
+                    Config.LoteNome = "013_Mansion" 
+                end
+
+                BtnMark.BackgroundColor3 = Color3.fromRGB(0, 80, 200); BtnMark.Text = "Universal Sync ✓"
                 return
             end
         end
     end
-    BtnMark.Text = "Not Found!"; task.wait(1); BtnMark.Text = "Mark Home/Mansion"
+    BtnMark.Text = "Not Found!"; task.wait(1); BtnMark.Text = "Marcar House"
 end)
 
 BtnActive.MouseButton1Click:Connect(function()
@@ -252,8 +256,7 @@ task.spawn(function()
             for _, p in pairs(Players:GetPlayers()) do
                 if p ~= Players.LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                     local dist = (Config.LotePos - p.Character.HumanoidRootPart.Position).Magnitude
-                    -- Ajuste de distância automática se for mansão (áreas maiores)
-                    local threshold = (Config.LoteNome:find("Mansion") or Config.LoteNome:find("012")) and 200 or Config.DistanciaDefesa
+                    local threshold = (Config.LoteNome:find("Mansion") or Config.LoteNome:find("01")) and 210 or Config.DistanciaDefesa
                     if dist < threshold then 
                         ExecutarBan(p) 
                     end
